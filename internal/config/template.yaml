@@ -1,0 +1,19 @@
+app:
+  name: 'name app'
+  delta_day: 0
+  delta_month: 0
+  delta_year: 0
+
+soloway:
+  username: 'username'
+  password: 'password'
+
+bq:
+  service_key_path: 'path to file token'
+  project_id: 'project'
+  dataset_id: 'dataset'
+  table_id: 'table'
+
+tg:
+  token: 'token'
+  chat: 0000000
