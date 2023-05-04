@@ -1,12 +1,6 @@
-app:
-  name: 'name app'
-  delta_day: 0
-  delta_month: 0
-  delta_year: 0
-
-soloway:
-  username: 'username'
-  password: 'password'
+google_sheets:
+  service_key_path: '/home/viktor/Programming/.keys/mgcom-realestate-dwh-script.json'
+  spreadsheet_id: '1c3Nl0KyO_DZL5WWxOX_xjH6Qpa9Ke4PMVndK2yr15lU'
 
 bq:
   service_key_path: 'path to file token'
