@@ -126,3 +126,12 @@ reports:
     table_id: 'bq_all_clients_table'
     days: 15
 ```
+
+## Конфигурация (Google spreadsheet c клиентами)
+
+Лист должен иметь название `// Config`
+
+| Клиент      | Логин         | Пароль           |
+|-------------|---------------|------------------|
+| client_name | soloway_login | soloway_password |
+
