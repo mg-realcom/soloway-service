@@ -1,0 +1,10 @@
+tg:
+  token: 'token'
+  chat: 0000000
+  is_enabled: false
+
+grpc:
+  ip: 'localhost'
+  port: 5555
+
+keys_dir: /path/to/dir
