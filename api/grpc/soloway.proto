@@ -3,7 +3,7 @@ syntax = "proto3";
 option go_package = "./pb";
 
 service SolowayService{
-  rpc PushPlacementStatByDayToBQ(PushPlacementStatByDayToBQRequest) returns(PushPlacementStatByDayToBQResponse);
+  rpc PushPlacementStatByDayToBQ(PushPlacementStatByDayToBQRequest) returns(PushPlacementStatByDayToBQResponse); // Сбор статистики по площадкам в разрезе дней
 }
 
 message BqConfig{
@@ -24,12 +24,12 @@ message Period {
 }
 
 message PushPlacementStatByDayToBQRequest{
-  BqConfig  bqConfig = 1;
-  GsConfig gsConfig = 2;
-  Period period = 3;
+  BqConfig  bqConfig = 1; //Конфигурация для BigQuery
+  GsConfig gsConfig = 2; //Конфигурация для CloudStorage
+  Period period = 3; // Период данных для сбора
 }
 
 message PushPlacementStatByDayToBQResponse{
   bool isOK = 1;
-  repeated string warnings = 2;
+  repeated string warnings = 2; // Возникшие ошибки
 }
