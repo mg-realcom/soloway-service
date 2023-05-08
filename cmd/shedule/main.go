@@ -26,6 +26,8 @@ func main() {
 		log.Fatalf("could not read config: %v", err)
 	}
 
+	defer GracefulShutdown()
+
 	fmt.Printf("Количество отчетов: %d\n", len(cfg.Reports))
 	fmt.Printf("Запуск ежедневно в: %s\n", cfg.Time)
 
@@ -47,7 +49,6 @@ func main() {
 }
 
 func scheduleRun(cfg config.ScheduleConfig) {
-	defer GracefulShutdown()
 
 	addr := net.JoinHostPort(cfg.GRPC.IP, strconv.Itoa(cfg.GRPC.Port))
 
