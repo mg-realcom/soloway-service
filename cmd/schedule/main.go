@@ -27,7 +27,7 @@ func main() {
 		log.Fatalf("could not read config: %v", err)
 	}
 
-	fmt.Printf("version: %s", version)
+	fmt.Printf("version: %s\n", version)
 
 	fmt.Printf("Количество отчетов: %d\n", len(cfg.Reports))
 	fmt.Printf("Запуск ежедневно в: %s\n", cfg.Time)
