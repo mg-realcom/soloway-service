@@ -11,10 +11,11 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"log"
 	"net"
-	"os"
 	"strconv"
 	"time"
 )
+
+const version = "1.0.1"
 
 func main() {
 	var fileConfig = flag.String("f", "schedule_config.yml", "configuration file")
@@ -26,7 +27,7 @@ func main() {
 		log.Fatalf("could not read config: %v", err)
 	}
 
-	defer GracefulShutdown()
+	fmt.Printf("version: %s", version)
 
 	fmt.Printf("Количество отчетов: %d\n", len(cfg.Reports))
 	fmt.Printf("Запуск ежедневно в: %s\n", cfg.Time)
@@ -44,12 +45,9 @@ func main() {
 	}
 
 	s.StartBlocking()
-
-	recover()
 }
 
 func scheduleRun(cfg config.ScheduleConfig) {
-
 	addr := net.JoinHostPort(cfg.GRPC.IP, strconv.Itoa(cfg.GRPC.Port))
 
 	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -98,12 +96,4 @@ func scheduleRun(cfg config.ScheduleConfig) {
 			log.Printf("Предупреждения: %v ", callsReq.Warnings)
 		}
 	}
-}
-
-func GracefulShutdown() {
-	if err := recover(); err != nil {
-		fmt.Println("Критическая ошибка:", err)
-	}
-
-	os.Exit(0)
 }
