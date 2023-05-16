@@ -31,6 +31,8 @@ func (su UseCase) GetStatPlacementByDay(ctx context.Context, startDate time.Time
 	}
 
 	for _, placement := range placements {
+		placement := placement
+
 		placementStat, err := su.statSrv.GetStatPlacementByDay(ctx, &placement, startDate, stopDate)
 		if err != nil {
 			return stat, fmt.Errorf("cannot get stat placement by day from soloway: %w", err)
@@ -42,7 +44,7 @@ func (su UseCase) GetStatPlacementByDay(ctx context.Context, startDate time.Time
 	return stat, nil
 }
 
-func (su UseCase) PushPlacementStatByDayToBQ(ctx context.Context, client string, startDate time.Time, stopDate time.Time) (err error) {
+func (su UseCase) PushPlacementStatByDayToBQ(ctx context.Context, client string, startDate time.Time, stopDate time.Time) error {
 	su.logger.Trace().Str("client", client).Str("startDate", startDate.Format(time.RFC3339)).Str("stopDate", stopDate.Format(time.RFC3339)).Msg("PushPlacementStatByDayToBQ")
 
 	stat, err := su.GetStatPlacementByDay(ctx, startDate, stopDate)
