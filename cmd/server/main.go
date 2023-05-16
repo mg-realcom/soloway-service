@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+const version = "1.0.1"
+
 func main() {
 	var fileConfig = flag.String("f", "config.yml", "configuration file")
 
@@ -49,6 +51,7 @@ func main() {
 		logger.Info().Msg("configuration from ENV")
 	}
 
+	logger.Info().Msgf("version: %s", version)
 	cfg, err := config.NewServerConfig(*fileConfig, *useEnv)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("Ошибка в файле настроек")
