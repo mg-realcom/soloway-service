@@ -19,4 +19,4 @@ reports:
     project_id: 'bq-project-id'
     dataset_id: 'bq-dataset-id'
     table_id: 'bq_all_clients_table'
-    days: 15
+    period: 15
