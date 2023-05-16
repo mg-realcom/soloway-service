@@ -116,7 +116,7 @@ reports:
     project_id: 'bq-project-id'
     dataset_id: 'bq-dataset-id'
     table_id: 'bq_all_clients_table'
-    days: 7
+    period: 7
 
   - report_name: "название отчета 2"
     spreadsheet_id: "google-spreadsheet-id"
@@ -124,7 +124,7 @@ reports:
     project_id: 'bq-project-id'
     dataset_id: 'bq-dataset-id'
     table_id: 'bq_all_clients_table'
-    days: 15
+    period: 15
 ```
 
 ## Конфигурация (Google spreadsheet c клиентами)
