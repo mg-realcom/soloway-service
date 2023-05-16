@@ -66,7 +66,7 @@ func (s *StatService) PushStatPlacementByDayToBQ(ctx context.Context, client str
 func (s *StatService) Send(ctx context.Context, client string, dateFrom time.Time, dateTill time.Time, stat []entity.StatPlacement) error {
 	s.logger.Trace().Msg("SendAll")
 
-	s.logger.Info().Msgf("Удаление за %s -- %s", dateFrom.Format(time.DateOnly), dateTill.Format(time.DateOnly))
+	s.logger.Info().Msgf("%s :Удаление за %s -- %s", client, dateFrom.Format(time.DateOnly), dateTill.Format(time.DateOnly))
 
 	err := s.bqRepo.DeleteByDateColumn(ctx, client, dateFrom, dateTill)
 	if err != nil {
