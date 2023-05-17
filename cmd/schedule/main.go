@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const version = "1.0.1"
+const version = "1.1.0"
 
 func main() {
 	var fileConfig = flag.String("f", "schedule_config.yml", "configuration file")
@@ -74,13 +74,13 @@ func scheduleRun(cfg config.ScheduleConfig) {
 
 		callsReq, err := c.PushPlacementStatByDayToBQ(ctx, &pb.PushPlacementStatByDayToBQRequest{
 			BqConfig: &pb.BqConfig{
-				ProjectID:  report.ProjectID,
-				DatasetID:  report.DatasetID,
-				TableID:    report.Table,
+				ProjectId:  report.ProjectID,
+				DatasetId:  report.DatasetID,
+				TableId:    report.Table,
 				ServiceKey: report.GoogleServiceKey,
 			},
 			GsConfig: &pb.GsConfig{
-				SpreadsheetID: report.SpreadsheetID,
+				SpreadsheetId: report.SpreadsheetID,
 				ServiceKey:    report.GoogleServiceKey,
 			},
 			Period: &pb.Period{
@@ -92,7 +92,7 @@ func scheduleRun(cfg config.ScheduleConfig) {
 		if err != nil {
 			log.Println(err)
 		} else {
-			log.Printf("Статус отчета: %v ", callsReq.IsOK)
+			log.Printf("Статус отчета: %v ", callsReq.IsOk)
 			log.Printf("Предупреждения: %v ", callsReq.Warnings)
 		}
 	}
