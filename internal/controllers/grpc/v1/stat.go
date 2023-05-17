@@ -27,7 +27,7 @@ func (s Server) PushPlacementStatByDayToBQ(ctx context.Context, req *pb.PushPlac
 		methodLogger.Error().Err(err).Msg(msgErrMethod)
 
 		return &pb.PushPlacementStatByDayToBQResponse{
-			IsOK: false,
+			IsOk: false,
 		}, err
 	}
 
@@ -36,7 +36,7 @@ func (s Server) PushPlacementStatByDayToBQ(ctx context.Context, req *pb.PushPlac
 		methodLogger.Error().Err(err).Msg(msgErrMethod)
 
 		return &pb.PushPlacementStatByDayToBQResponse{
-			IsOK: false,
+			IsOk: false,
 		}, fmt.Errorf("wrong value in field 'dateFrom' : %w", err)
 	}
 
@@ -45,15 +45,15 @@ func (s Server) PushPlacementStatByDayToBQ(ctx context.Context, req *pb.PushPlac
 		methodLogger.Error().Err(err).Msg(msgErrMethod)
 
 		return &pb.PushPlacementStatByDayToBQResponse{
-			IsOK: false,
+			IsOk: false,
 		}, fmt.Errorf("wrong value in field 'dateTill' : %w", err)
 	}
 
 	bqConfig := config.BQ{
 		ServiceKeyPath: bqServiceKey,
-		ProjectID:      req.BqConfig.ProjectID,
-		DatasetID:      req.BqConfig.DatasetID,
-		TableID:        req.BqConfig.TableID,
+		ProjectID:      req.BqConfig.ProjectId,
+		DatasetID:      req.BqConfig.DatasetId,
+		TableID:        req.BqConfig.TableId,
 	}
 
 	ghSrv, err := sheets.NewService(ctx, option.WithCredentialsFile(gsServiceKey))
@@ -61,19 +61,19 @@ func (s Server) PushPlacementStatByDayToBQ(ctx context.Context, req *pb.PushPlac
 		methodLogger.Error().Err(err).Msg(msgErrMethod)
 
 		return &pb.PushPlacementStatByDayToBQResponse{
-			IsOK: false,
+			IsOk: false,
 		}, fmt.Errorf("ошибка инициализации gs client")
 	}
 
 	userRepo := gs.NewUserRepository(*ghSrv, s.logger)
 	userSrv := service.NewUserService(userRepo, s.logger)
 
-	users, err := userSrv.GetAll(req.GsConfig.SpreadsheetID)
+	users, err := userSrv.GetAll(req.GsConfig.SpreadsheetId)
 	if err != nil {
 		methodLogger.Error().Err(err).Msg(msgErrMethod)
 
 		return &pb.PushPlacementStatByDayToBQResponse{
-			IsOK: true,
+			IsOk: true,
 		}, fmt.Errorf("ошибка получения пользователей")
 	}
 
@@ -81,7 +81,7 @@ func (s Server) PushPlacementStatByDayToBQ(ctx context.Context, req *pb.PushPlac
 		methodLogger.Info().Msg("Ни один клиент не собран")
 
 		return &pb.PushPlacementStatByDayToBQResponse{
-			IsOK: false,
+			IsOk: false,
 		}, fmt.Errorf("отсутсвуют пользователи в справочнике")
 	}
 
@@ -119,13 +119,13 @@ func (s Server) PushPlacementStatByDayToBQ(ctx context.Context, req *pb.PushPlac
 		methodLogger.Warn().Msg("Ни один клиент не собран")
 
 		return &pb.PushPlacementStatByDayToBQResponse{
-			IsOK:     false,
+			IsOk:     false,
 			Warnings: warnings,
 		}, errors.New("ни один клиент не собран : %s")
 	}
 
 	return &pb.PushPlacementStatByDayToBQResponse{
-		IsOK:     true,
+		IsOk:     true,
 		Warnings: warnings,
 	}, nil
 }

@@ -1,35 +1,39 @@
 syntax = "proto3";
 
+package soloway;
+
 option go_package = "./pb";
 
 service SolowayService{
   rpc PushPlacementStatByDayToBQ(PushPlacementStatByDayToBQRequest) returns(PushPlacementStatByDayToBQResponse); // Сбор статистики по площадкам в разрезе дней
 }
 
+//Конфигурация для BigQuery
 message BqConfig{
-  string projectID = 1;
-  string datasetID = 2;
-  string tableID = 3;
-  string serviceKey = 4; // Название файла сервисного ключа
+  string project_id = 1; // required
+  string dataset_id = 2; // required
+  string table_id = 3; // required
+  string service_key = 4; // required Название файла сервисного ключа
 }
+
 
 message GsConfig{
-  string spreadsheetID = 1;
-  string serviceKey = 2; // Название файла сервисного ключа
+  string spreadsheet_id = 1; // required
+  string service_key = 2; // required Название файла сервисного ключа
 }
 
-message Period {
-  string dateFrom = 1; // dateFrom is date represented in the ISO-8601 format
-  string  dateTill = 2; // dateTill is date represented in the ISO-8601 format
+message Period{
+  string date_from = 1; //  required  is date represented in the ISO-8601 format
+  string date_till = 2; //  required  is date represented in the ISO-8601 format
 }
 
 message PushPlacementStatByDayToBQRequest{
-  BqConfig  bqConfig = 1; //Конфигурация для BigQuery
-  GsConfig gsConfig = 2; //Конфигурация для CloudStorage
-  Period period = 3; // Период данных для сбора
+  BqConfig  bq_config = 1; // required  Конфигурация для BigQuery
+  GsConfig gs_config = 2; // required  Конфигурация для CloudStorage
+  Period period = 3; //  required  Период данных для сбора
 }
 
 message PushPlacementStatByDayToBQResponse{
-  bool isOK = 1;
+  bool is_ok = 1;
   repeated string warnings = 2; // Возникшие ошибки
 }

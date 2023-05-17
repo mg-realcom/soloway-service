@@ -35,7 +35,7 @@ func NewSolowayServiceClient(cc grpc.ClientConnInterface) SolowayServiceClient {
 
 func (c *solowayServiceClient) PushPlacementStatByDayToBQ(ctx context.Context, in *PushPlacementStatByDayToBQRequest, opts ...grpc.CallOption) (*PushPlacementStatByDayToBQResponse, error) {
 	out := new(PushPlacementStatByDayToBQResponse)
-	err := c.cc.Invoke(ctx, "/SolowayService/PushPlacementStatByDayToBQ", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/soloway.SolowayService/PushPlacementStatByDayToBQ", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func _SolowayService_PushPlacementStatByDayToBQ_Handler(srv interface{}, ctx con
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/SolowayService/PushPlacementStatByDayToBQ",
+		FullMethod: "/soloway.SolowayService/PushPlacementStatByDayToBQ",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(SolowayServiceServer).PushPlacementStatByDayToBQ(ctx, req.(*PushPlacementStatByDayToBQRequest))
@@ -92,7 +92,7 @@ func _SolowayService_PushPlacementStatByDayToBQ_Handler(srv interface{}, ctx con
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var SolowayService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "SolowayService",
+	ServiceName: "soloway.SolowayService",
 	HandlerType: (*SolowayServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
