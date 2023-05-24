@@ -8,3 +8,4 @@ grpc:
   port: 5555
 
 keys_dir: /path/to/dir
+prometheus_addr: localhost:9090

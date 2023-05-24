@@ -29,9 +29,10 @@ type GRPC struct {
 }
 
 type ServerConfig struct {
-	TG      `yaml:"tg"`
-	GRPC    `yaml:"grpc"`
-	KeysDir string `yaml:"keys_dir" env:"KEYS_DIR"`
+	TG             `yaml:"tg"`
+	GRPC           `yaml:"grpc"`
+	KeysDir        string `yaml:"keys_dir" env:"KEYS_DIR"`
+	PrometheusAddr string `yaml:"prometheus_addr" env:"PROMETHEUS_ADDR"`
 }
 
 func NewServerConfig(filePath string, useEnv bool) (*ServerConfig, error) {
