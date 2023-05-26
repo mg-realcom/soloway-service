@@ -44,7 +44,8 @@ func (s *StatService) GetStatPlacementByDay(ctx context.Context, placement *enti
 	return stat, nil
 }
 
-func (s *StatService) PushStatPlacementByDayToBQ(ctx context.Context, client string, stat []entity.StatPlacement) error {
+func (s *StatService) PushStatPlacementByDayToBQ(ctx context.Context, client string, stat []entity.StatPlacement,
+	dateFrom time.Time, dateTill time.Time) error {
 	s.logger.Trace().Str("client", client).Msg("PushStatPlacementByDayToBQ")
 
 	err := s.bqRepo.TableExists(ctx)
@@ -55,27 +56,16 @@ func (s *StatService) PushStatPlacementByDayToBQ(ctx context.Context, client str
 		}
 	}
 
+	s.logger.Info().Msgf("%s :Удаление за %s -- %s", client, dateFrom.Format(time.DateOnly), dateTill.Format(time.DateOnly))
+
+	errBq := s.bqRepo.DeleteByDateColumn(ctx, client, dateFrom, dateTill)
+	if errBq != nil {
+		return fmt.Errorf("can`t delete by date column")
+	}
+
 	err = s.bqRepo.SendPlacementStatByDay(ctx, client, stat)
 	if err != nil {
 		return fmt.Errorf("cannot send stat placement by day to BQ: %w", err)
-	}
-
-	return nil
-}
-
-func (s *StatService) Send(ctx context.Context, client string, dateFrom time.Time, dateTill time.Time, stat []entity.StatPlacement) error {
-	s.logger.Trace().Msg("SendAll")
-
-	s.logger.Info().Msgf("%s :Удаление за %s -- %s", client, dateFrom.Format(time.DateOnly), dateTill.Format(time.DateOnly))
-
-	err := s.bqRepo.DeleteByDateColumn(ctx, client, dateFrom, dateTill)
-	if err != nil {
-		return fmt.Errorf("ошибка удаления из bq: %w", err)
-	}
-
-	err = s.PushStatPlacementByDayToBQ(ctx, client, stat)
-	if err != nil {
-		return fmt.Errorf("ошибка добавления в bq из storage: %w", err)
 	}
 
 	return nil

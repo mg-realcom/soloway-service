@@ -52,7 +52,8 @@ func (su UseCase) PushPlacementStatByDayToBQ(ctx context.Context, client string,
 		return fmt.Errorf("cannot get stat placement by day from soloway: %w", err)
 	}
 
-	err = su.statSrv.Send(ctx, client, startDate, stopDate, stat)
+	//err = su.statSrv.Send(ctx, client, startDate, stopDate, stat)
+	err = su.statSrv.PushStatPlacementByDayToBQ(ctx, client, stat, startDate, stopDate)
 	if err != nil {
 		return fmt.Errorf("ошибка отправки статистики по дням в BQ: %w", err)
 	}
