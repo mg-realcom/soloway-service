@@ -1,82 +1,74 @@
 package config
 
 import (
-	"fmt"
+	"log"
+	"os"
+
 	"github.com/ilyakaznacheev/cleanenv"
+	"github.com/pkg/errors"
+	"soloway/pkg/utils"
 )
 
-type Soloway struct {
-	UserName string `yaml:"username" env:"SOLOWAY_USERNAME"`
-	Password string `yaml:"password" env:"SOLOWAY_PASSWORD"`
-}
-
-type BQ struct {
-	ServiceKeyPath string `yaml:"service_key_path"`
-	ProjectID      string `yaml:"project_id"`
-	DatasetID      string `yaml:"dataset_id"`
-	TableID        string `yaml:"table_id"`
-}
-
-type TG struct {
-	IsEnabled bool   `yaml:"is_enabled" env:"TG_ENABLED"`
-	Token     string `yaml:"token" env:"TG_TOKEN"`
-	Chat      int64  `yaml:"chat" env:"TG_CHAT"`
+type Configuration struct {
+	GRPC           GRPC      `yaml:"grpc" env-prefix:"GRPC_" env-required:"true"`
+	Telemetry      Telemetry `yaml:"telemetry" env-prefix:"TELEMETRY_" env-required:"true"`
+	Log            Log       `yaml:"log" env-prefix:"LOG_" env-required:"true"`
+	AttachmentsDir string    `yaml:"attachments_dir" env:"ATTACHMENTS_DIR" env-required:"true"`
+	KeysDir        string    `yaml:"keys_dir" env:"KEYS_DIR" env-required:"true"`
+	PrometheusAddr string    `yaml:"prometheus_addr" env:"PROMETHEUS_ADDR" env-required:"true"`
 }
 
 type GRPC struct {
-	IP   string `yaml:"ip" env:"GRPC_IP"`
-	Port int    `yaml:"port" env:"GRPC_PORT"`
+	Network string `yaml:"network" env:"NETWORK" env-required:"true"`
+	Address string `yaml:"address" env:"ADDRESS" env-required:"true"`
 }
 
-type ServerConfig struct {
-	TG             `yaml:"tg"`
-	GRPC           `yaml:"grpc"`
-	KeysDir        string `yaml:"keys_dir" env:"KEYS_DIR"`
-	PrometheusAddr string `yaml:"prometheus_addr" env:"PROMETHEUS_ADDR"`
+type Telemetry struct {
+	TracerName     string `yaml:"tracer_name" env:"TRACER_NAME" env-required:"true"`
+	ServerName     string `yaml:"server_name" env:"SERVER_NAME" env-required:"true"`
+	JaegerEndpoint string `yaml:"jaeger_endpoint" env:"JAEGER_ENDPOINT" env-required:"true"`
 }
 
-func NewServerConfig(filePath string, useEnv bool) (*ServerConfig, error) {
-	cfg := &ServerConfig{}
+type Log struct {
+	Level string `yaml:"level" env:"LEVEL" env-required:"true"`
+}
 
-	if useEnv {
-		err := cleanenv.ReadEnv(cfg)
-		if err != nil {
-			return nil, fmt.Errorf("env error: %w", err)
+func NewConfig() (*Configuration, error) {
+	var envFiles []string
+
+	if _, err := os.Stat(".env"); err == nil {
+		log.Println("found .env file, adding it to env config files list")
+
+		envFiles = append(envFiles, ".env")
+	}
+
+	cfg := &Configuration{}
+
+	if len(envFiles) > 0 {
+		for _, file := range envFiles {
+			err := cleanenv.ReadConfig(file, cfg)
+			if err != nil {
+				return nil, errors.Wrapf(err, "error while read env config file: %s", err)
+			}
 		}
 	} else {
-		err := cleanenv.ReadConfig(filePath, cfg)
+		err := cleanenv.ReadEnv(cfg)
 		if err != nil {
-			return nil, fmt.Errorf("config file error: %w", err)
+			return nil, errors.Wrapf(err, "error while opening env: %s", err)
 		}
 	}
 
 	return cfg, nil
 }
 
-type Report struct {
-	ReportName       string `yaml:"report_name"`
-	SpreadsheetID    string `yaml:"spreadsheet_id"`
-	GoogleServiceKey string `yaml:"google_service_key"`
-	ProjectID        string `yaml:"project_id"`
-	DatasetID        string `yaml:"dataset_id"`
-	Table            string `yaml:"table_id"`
-	Days             int    `yaml:"period"`
-}
-
-func NewScheduleConfig(filePath string) (*ScheduleConfig, error) {
-	cfg := &ScheduleConfig{}
-
-	err := cleanenv.ReadConfig(filePath, cfg)
-	if err != nil {
-		return nil, fmt.Errorf("config error: %w", err)
+func (c *Configuration) Validation() error {
+	if !utils.DirExists(c.KeysDir) {
+		return errors.New("keys dir not found")
 	}
 
-	return cfg, nil
-}
+	if !utils.DirExists(c.AttachmentsDir) {
+		return errors.New("attachments dir not found")
+	}
 
-type ScheduleConfig struct {
-	Time    string `yaml:"time"`
-	GRPC    `yaml:"grpc"`
-	BQ      `yaml:"bq"`
-	Reports []Report `yaml:"reports"`
+	return nil
 }
