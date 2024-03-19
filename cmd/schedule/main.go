@@ -1,24 +1,21 @@
 package main
 
 import (
-	"Soloway/internal/config"
-	"Soloway/pb"
 	"context"
 	"flag"
 	"fmt"
+	"log"
+	"time"
+
 	"github.com/go-co-op/gocron"
+	pb "github.com/mg-realcom/go-genproto/service/soloway.v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"log"
-	"net"
-	"strconv"
-	"time"
+	"soloway/internal/config"
 )
 
-const version = "1.1.0"
-
 func main() {
-	var fileConfig = flag.String("f", "schedule_config.yml", "configuration file")
+	fileConfig := flag.String("f", "schedule_config.yml", "configuration file")
 
 	flag.Parse()
 
@@ -27,8 +24,6 @@ func main() {
 		log.Fatalf("could not read config: %v", err)
 	}
 
-	fmt.Printf("version: %s\n", version)
-
 	fmt.Printf("Количество отчетов: %d\n", len(cfg.Reports))
 	fmt.Printf("Запуск ежедневно в: %s\n", cfg.Time)
 
@@ -36,6 +31,9 @@ func main() {
 	s.WaitForScheduleAll()
 
 	location, err := time.LoadLocation("Local")
+	if err != nil {
+		log.Fatalf("could not load location: %v", err)
+	}
 
 	s.ChangeLocation(location)
 
@@ -48,9 +46,7 @@ func main() {
 }
 
 func scheduleRun(cfg config.ScheduleConfig) {
-	addr := net.JoinHostPort(cfg.GRPC.IP, strconv.Itoa(cfg.GRPC.Port))
-
-	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(cfg.Destination, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
@@ -79,6 +75,9 @@ func scheduleRun(cfg config.ScheduleConfig) {
 				TableId:    report.Table,
 				ServiceKey: report.GoogleServiceKey,
 			},
+			CsConfig: &pb.CsConfig{
+				BucketName: "",
+			},
 			GsConfig: &pb.GsConfig{
 				SpreadsheetId: report.SpreadsheetID,
 				ServiceKey:    report.GoogleServiceKey,
@@ -92,7 +91,6 @@ func scheduleRun(cfg config.ScheduleConfig) {
 		if err != nil {
 			log.Println(err)
 		} else {
-			log.Printf("Статус отчета: %v ", callsReq.IsOk)
 			log.Printf("Предупреждения: %v ", callsReq.Warnings)
 		}
 	}
