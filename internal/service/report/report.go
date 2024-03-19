@@ -168,7 +168,6 @@ func (s *Service) PushPlacementStatByDayToBQ(ctx context.Context, req *pb.PushPl
 
 				continue
 			}
-
 		}
 	}
 
