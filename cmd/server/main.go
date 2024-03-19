@@ -1,96 +1,109 @@
 package main
 
 import (
-	"Soloway/internal/app/server"
-	"Soloway/internal/config"
-	"Soloway/pkg/metrics"
 	"context"
-	"flag"
-	"github.com/nikoksr/notify"
-	"github.com/nikoksr/notify/service/telegram"
-	"github.com/rs/zerolog"
+	"io"
+	"log"
 	"os"
-	"runtime/debug"
-	"time"
+	"os/signal"
+	"syscall"
+
+	"github.com/rs/zerolog"
+	"google.golang.org/grpc"
+	"soloway/internal/config"
+	"soloway/pkg/logger"
+	"soloway/pkg/tracing"
 )
 
-const version = "1.1.0"
-
 func main() {
-	var fileConfig = flag.String("f", "config.yml", "configuration file")
+	ctx := context.Background()
 
-	var useEnv = flag.Bool("env", false, "use environment variables")
-
-	var trace = flag.Bool("trace", false, "switch trace logging")
-
-	flag.Parse()
-
-	buildInfo, _ := debug.ReadBuildInfo()
-
-	var logger zerolog.Logger
-	if *trace {
-		logger = zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339}).
-			Level(zerolog.TraceLevel).
-			With().
-			Timestamp().
-			Caller().
-			Int("pid", os.Getpid()).
-			Str("go_version", buildInfo.GoVersion).
-			Logger()
-		logger.Info().Msg("Logging level = Trace")
-	} else {
-		logger = zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339}).
-			Level(zerolog.InfoLevel).
-			With().
-			Timestamp().
-			Logger()
-	}
-
-	if !*useEnv {
-		logger.Info().Msgf("configuration file: %s", *fileConfig)
-	} else {
-		logger.Info().Msg("configuration from ENV")
-	}
-
-	logger.Info().Msgf("version: %s", version)
-
-	cfg, err := config.NewServerConfig(*fileConfig, *useEnv)
+	cfg, err := config.NewConfig()
 	if err != nil {
-		logger.Fatal().Err(err).Msg("Ошибка в файле настроек")
+		log.Fatal("can`t load configuration")
 	}
 
-	go func() {
-		if cfg.PrometheusAddr != "" {
-			logger.Info().Msg("Сервис Prometheus запущен")
-			err := metrics.Listen(cfg.PrometheusAddr)
+	err = cfg.Validation()
+	if err != nil {
+		log.Fatalf("not valid configuration: %s", err)
+	}
+
+	var baseLogger zerolog.Logger
+
+	var loggerCloser io.WriteCloser
+
+	baseLogger, loggerCloser, err = logger.NewLogger(os.Stdout, cfg.Log.Level)
+
+	apiLogger := logger.NewComponentLogger(baseLogger, "api", 2)
+	coreLogger := logger.NewComponentLogger(baseLogger, "core", 2)
+	netLogger := logger.NewComponentLogger(baseLogger, "net", 2)
+
+	defer func() {
+		if loggerCloser != nil {
+			err = loggerCloser.Close()
 			if err != nil {
-				logger.Fatal().Err(err).Msg("Ошибка в сервисе: Prometheus")
+				log.Fatalf("error acquired while closing log writer: %+v", err)
 			}
-		} else {
-			logger.Info().Msg("Сервис Prometheus не запущен")
 		}
 	}()
 
-	telegramService, err := telegram.New(cfg.Token)
+	defer func() {
+		coreLogger.Info().Msg("application stopped")
+	}()
+
+	coreLogger.Info().Msg("application started")
+
+	go initPrometheus(cfg.PrometheusAddr, coreLogger)
+
+	err = tracing.Init(ctx, cfg.Telemetry.ServerName, cfg.Telemetry.JaegerEndpoint)
 	if err != nil {
-		logger.Fatal().Err(err).Msg("Ошибка в сервисе: Telegram")
+		coreLogger.Fatal().Err(err).Msg("failed to create tracer")
 	}
 
-	telegramService.AddReceivers(cfg.Chat)
+	serviceEndpoints := initEndpoints(cfg, apiLogger)
 
-	appNotify := notify.New()
-	appNotify.UseServices(telegramService)
+	listenErr := make(chan error, 1)
 
-	if !cfg.IsEnabled {
-		notify.Disable(appNotify)
-	}
+	grpcServer, grpcListener := initKitGRPC(cfg, serviceEndpoints, netLogger, listenErr)
+	defer func() {
+		err = grpcListener.Close()
+		if err != nil {
+			netLogger.Warn().Err(err).Msgf("failed to close net.Listen - %+v", err)
+		}
+	}()
 
-	a := server.NewApp(cfg, &logger, appNotify)
+	runApp(grpcServer, coreLogger, listenErr)
+}
 
-	ctx := context.Background()
+func runApp(grpcServer *grpc.Server, coreLogger zerolog.Logger, listenErr chan error) {
+	shutdownCh := make(chan os.Signal, 1)
+	signal.Notify(shutdownCh, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
-	err = a.Run(ctx)
-	if err != nil {
-		logger.Fatal().Err(err).Msg("ошибка приложения")
+	var err error
+	runningApp := true
+
+	for runningApp {
+		select {
+		// handle error channel
+		case err = <-listenErr:
+			if err != nil {
+				coreLogger.Error().Err(err).Msg("received listener error")
+				shutdownCh <- os.Kill
+			}
+		// handle os system signal
+		case sig := <-shutdownCh:
+			coreLogger.Info().Msgf("shutdown signal received: %s", sig.String())
+
+			if err != nil {
+				coreLogger.Error().Err(err).Msg("received http Shutdown error")
+			}
+
+			grpcServer.GracefulStop()
+			coreLogger.Info().Msg("server stopped")
+
+			runningApp = false
+
+			break
+		}
 	}
 }
