@@ -17,7 +17,7 @@ import (
 const readRange = "// Config!A2:C"
 
 func (r Repository) SendFromStorage(ctx context.Context, destination Destination, dateStart, dateFinish time.Time, bucketName string, file string, clientName string) (err error) {
-	repoLogger := r.logger.With().Str("Source", "SendFromStorage").Logger()
+	repoLogger := r.logger.With().Str("Source", "SendFromStorage").Str("type", "bq").Logger()
 
 	schema := PlacementStatDTO{}
 
@@ -56,7 +56,7 @@ func (r Repository) SendFromStorage(ctx context.Context, destination Destination
 }
 
 func (r Repository) GetUsers(ctx context.Context, spreadsheetID string) ([]entity.User, error) {
-	repoLogger := r.logger.With().Str("Source", "GetUsers").Logger()
+	repoLogger := r.logger.With().Str("Source", "GetUsers").Str("type", "gsheets").Logger()
 
 	resp, err := r.spreadsheetSrv.Spreadsheets.Values.Get(spreadsheetID, readRange).Do()
 	if err != nil {
@@ -66,50 +66,56 @@ func (r Repository) GetUsers(ctx context.Context, spreadsheetID string) ([]entit
 	}
 
 	users := make([]entity.User, 0, len(resp.Values))
+
 	for _, row := range resp.Values {
-		client, ok := row[0].(string)
-		if !ok {
-			msg := "can't get: 'Клиент' in gsheets"
-			repoLogger.Error().Msg(msg)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+			client, ok := row[0].(string)
+			if !ok {
+				msg := "can't get: 'Клиент' in gsheets"
+				repoLogger.Error().Msg(msg)
 
-			return nil, fmt.Errorf(msg)
+				return nil, errors.New(msg)
+			}
+
+			client = strings.ToLower(client)
+
+			loginStr, ok := row[1].(string)
+			if !ok {
+				msg := "can't get: 'Логин' in gsheets"
+				repoLogger.Error().Msg(msg)
+
+				return nil, errors.New(msg)
+			}
+
+			login := strings.ToLower(loginStr)
+
+			passStr, ok := row[2].(string)
+			if !ok {
+				msg := "can't get: 'Пароль' in gsheets"
+				repoLogger.Error().Msg(msg)
+
+				return nil, errors.New(msg)
+			}
+
+			pass := passStr
+
+			user := entity.User{
+				Name:     client,
+				Login:    login,
+				Password: pass,
+			}
+			users = append(users, user)
 		}
-
-		client = strings.ToLower(client)
-
-		loginStr, ok := row[1].(string)
-		if !ok {
-			msg := "can't get: 'Логин' in gsheets"
-			repoLogger.Error().Msg(msg)
-
-			return nil, fmt.Errorf(msg)
-		}
-
-		login := strings.ToLower(loginStr)
-
-		passStr, ok := row[2].(string)
-		if !ok {
-			msg := "can't get: 'Пароль' in gsheets"
-			repoLogger.Error().Msg(msg)
-
-			return nil, fmt.Errorf(msg)
-		}
-
-		pass := passStr
-
-		user := entity.User{
-			Name:     client,
-			Login:    login,
-			Password: pass,
-		}
-		users = append(users, user)
 	}
 
 	return users, nil
 }
 
 func (r Repository) GetStatPlacementByDay(ctx context.Context, client *solowaysdk.Client, startDate time.Time, stopDate time.Time) (stat []entity.StatPlacement, err error) {
-	repoLogger := r.logger.With().Str("Source", "GetStatPlacementByDay").Logger()
+	repoLogger := r.logger.With().Str("Source", "GetStatPlacementByDay").Str("type", "soloway-api").Str("username", client.Username).Logger()
 
 	data, err := client.GetPlacements(ctx)
 	if err != nil {
@@ -124,7 +130,8 @@ func (r Repository) GetStatPlacementByDay(ctx context.Context, client *solowaysd
 	for i := 0; i < len(data.List); i++ {
 		placements = append(placements, *newPlacement(data.List[i]))
 	}
-	g, ctx := errgroup.WithContext(context.Background())
+
+	g, ctx := errgroup.WithContext(ctx)
 	statCh := make(chan []entity.StatPlacement, len(placements))
 
 	for _, placement := range placements {
