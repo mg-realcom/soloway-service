@@ -76,7 +76,7 @@ func scheduleRun(cfg config.ScheduleConfig) {
 				ServiceKey: report.GoogleServiceKey,
 			},
 			CsConfig: &pb.CsConfig{
-				BucketName: "",
+				BucketName: report.BucketName,
 			},
 			GsConfig: &pb.GsConfig{
 				SpreadsheetId: report.SpreadsheetID,

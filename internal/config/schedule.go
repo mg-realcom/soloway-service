@@ -7,10 +7,8 @@ import (
 )
 
 type ScheduleConfig struct {
-	Destination string   `yaml:"destination" env-required:"true"`
+	Destination string   `yaml:"destination"`
 	Time        string   `yaml:"time"`
-	BQ          BQ       `yaml:"bq"`
-	CS          CS       `yaml:"cs"`
 	Reports     []Report `yaml:"reports"`
 }
 
@@ -32,21 +30,6 @@ type Report struct {
 	ProjectID        string `yaml:"project_id"`
 	DatasetID        string `yaml:"dataset_id"`
 	Table            string `yaml:"table_id"`
+	BucketName       string `yaml:"bucket_name"`
 	Days             int    `yaml:"period"`
-}
-
-type Soloway struct {
-	UserName string `yaml:"username" env:"SOLOWAY_USERNAME"`
-	Password string `yaml:"password" env:"SOLOWAY_PASSWORD"`
-}
-
-type BQ struct {
-	ServiceKeyPath string `yaml:"service_key_path"`
-	ProjectID      string `yaml:"project_id"`
-	DatasetID      string `yaml:"dataset_id"`
-	TableID        string `yaml:"table_id"`
-}
-
-type CS struct {
-	BucketName string `yaml:"bucket_name"`
 }

@@ -72,3 +72,8 @@ func (c *Configuration) Validation() error {
 
 	return nil
 }
+
+type Soloway struct {
+	UserName string `yaml:"username" env:"SOLOWAY_USERNAME"`
+	Password string `yaml:"password" env:"SOLOWAY_PASSWORD"`
+}
