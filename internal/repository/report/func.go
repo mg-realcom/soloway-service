@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"soloway/pkg/tracing"
+
 	"cloud.google.com/go/civil"
 	solowaysdk "github.com/zfullio/soloway-sdk"
 	"golang.org/x/sync/errgroup"
@@ -19,11 +21,18 @@ const readRange = "// Config!A2:C"
 func (r Repository) SendFromStorage(ctx context.Context, destination Destination, dateStart, dateFinish time.Time, bucketName string, file string, clientName string) (err error) {
 	repoLogger := r.logger.With().Str("Source", "SendFromStorage").Str("type", "bq").Logger()
 
+	ctx, span := tracing.CreateSpan(ctx, "bq", "SendFromStorage")
+
+	tracing.SetSpanAttribute(span, tracing.AttributeUser, clientName)
+	tracing.SetSpanAttribute(span, "file", file)
+
 	schema := PlacementStatDTO{}
 
 	err = r.storage.SendFile(ctx, file)
 	if err != nil {
-		repoLogger.Error().Err(err).Msg("error send storage")
+		msg := "error send file"
+		repoLogger.Error().Err(err).Msg(msg)
+		tracing.EndSpanError(span, err, msg, true)
 
 		return fmt.Errorf("error send storage: %w", err)
 	}
@@ -32,14 +41,18 @@ func (r Repository) SendFromStorage(ctx context.Context, destination Destination
 	if err != nil {
 		err = r.bd.CreateTable(ctx, destination, schema)
 		if err != nil {
-			repoLogger.Error().Err(err).Msg("error create BQ table")
+			msg := "error create BQ table"
+			repoLogger.Error().Err(err).Msg(msg)
+			tracing.EndSpanError(span, err, msg, true)
 
 			return fmt.Errorf("creation BQ table error: %w", err)
 		}
 	} else {
 		err = r.bd.DeleteByDateColumn(ctx, destination, clientName, "date", dateStart, dateFinish)
 		if err != nil {
-			repoLogger.Error().Err(err).Msg("error delete bq")
+			msg := "error delete bq"
+			repoLogger.Error().Err(err).Msg(msg)
+			tracing.EndSpanError(span, err, msg, true)
 
 			return fmt.Errorf("error delete bq: %w", err)
 		}
@@ -47,10 +60,14 @@ func (r Repository) SendFromStorage(ctx context.Context, destination Destination
 
 	err = r.bd.ImportFromCS(ctx, destination, bucketName, file, schema)
 	if err != nil {
-		repoLogger.Error().Err(err).Msg("error push to BQ from storage")
+		msg := "error push to BQ from storage"
+		repoLogger.Error().Err(err).Msg(msg)
+		tracing.EndSpanError(span, err, msg, true)
 
 		return fmt.Errorf("error push to BQ from storage: %w", err)
 	}
+
+	tracing.EndSpanOk(span, "SendFromStorage", true)
 
 	return nil
 }
@@ -58,11 +75,17 @@ func (r Repository) SendFromStorage(ctx context.Context, destination Destination
 func (r Repository) GetUsers(ctx context.Context, spreadsheetID string) ([]entity.User, error) {
 	repoLogger := r.logger.With().Str("Source", "GetUsers").Str("type", "gsheets").Logger()
 
+	ctx, span := tracing.CreateSpan(ctx, "gsheets", "GetUsers")
+
+	tracing.SetSpanAttribute(span, "spreadsheetID", spreadsheetID)
+
 	resp, err := r.spreadsheetSrv.Spreadsheets.Values.Get(spreadsheetID, readRange).Do()
 	if err != nil {
-		repoLogger.Error().Err(err).Msg("api error")
+		msg := "api error"
+		repoLogger.Error().Err(err).Msg(msg)
+		tracing.EndSpanError(span, err, msg, true)
 
-		return nil, fmt.Errorf("api error: %w", err)
+		return nil, fmt.Errorf("%s: %w", msg, err)
 	}
 
 	users := make([]entity.User, 0, len(resp.Values))
@@ -70,12 +93,15 @@ func (r Repository) GetUsers(ctx context.Context, spreadsheetID string) ([]entit
 	for _, row := range resp.Values {
 		select {
 		case <-ctx.Done():
+			tracing.EndSpanError(span, err, "context done", true)
+
 			return nil, ctx.Err()
 		default:
 			client, ok := row[0].(string)
 			if !ok {
 				msg := "can't get: 'Клиент' in gsheets"
 				repoLogger.Error().Msg(msg)
+				tracing.EndSpanError(span, err, msg, true)
 
 				return nil, errors.New(msg)
 			}
@@ -86,6 +112,7 @@ func (r Repository) GetUsers(ctx context.Context, spreadsheetID string) ([]entit
 			if !ok {
 				msg := "can't get: 'Логин' in gsheets"
 				repoLogger.Error().Msg(msg)
+				tracing.EndSpanError(span, err, msg, true)
 
 				return nil, errors.New(msg)
 			}
@@ -96,6 +123,7 @@ func (r Repository) GetUsers(ctx context.Context, spreadsheetID string) ([]entit
 			if !ok {
 				msg := "can't get: 'Пароль' in gsheets"
 				repoLogger.Error().Msg(msg)
+				tracing.EndSpanError(span, err, msg, true)
 
 				return nil, errors.New(msg)
 			}
@@ -111,16 +139,23 @@ func (r Repository) GetUsers(ctx context.Context, spreadsheetID string) ([]entit
 		}
 	}
 
+	tracing.EndSpanOk(span, "GetUsers", true)
+
 	return users, nil
 }
 
 func (r Repository) GetStatPlacementByDay(ctx context.Context, client *solowaysdk.Client, startDate time.Time, stopDate time.Time) (stat []entity.StatPlacement, err error) {
 	repoLogger := r.logger.With().Str("Source", "GetStatPlacementByDay").Str("type", "soloway-api").Str("username", client.Username).Logger()
 
+	ctx, span := tracing.CreateSpan(ctx, "soloway-api", "GetStatPlacementByDay")
+
+	tracing.SetSpanAttribute(span, tracing.AttributeUser, client.Username)
+
 	data, err := client.GetPlacements(ctx)
 	if err != nil {
 		msg := "can't get placements"
 		repoLogger.Error().Err(err).Msg(msg)
+		tracing.EndSpanError(span, err, msg, true)
 
 		return stat, errors.New(msg)
 	}
@@ -166,8 +201,12 @@ func (r Repository) GetStatPlacementByDay(ctx context.Context, client *solowaysd
 	}
 
 	if err := g.Wait(); err != nil {
+		tracing.EndSpanError(span, err, err.Error(), true)
+
 		return nil, err
 	}
+
+	tracing.EndSpanOk(span, "GetStatPlacementByDay", true)
 
 	return stat, nil
 }
