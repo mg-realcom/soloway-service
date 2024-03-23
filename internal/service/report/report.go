@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sync"
 	"time"
+
+	"soloway/internal/entity"
 
 	pb "github.com/mg-realcom/go-genproto/service/soloway.v1"
 	"github.com/rs/zerolog"
@@ -79,6 +82,8 @@ func (s *Service) PushPlacementStatByDayToBQ(ctx context.Context, req *pb.PushPl
 	dateUpdate := time.Now()
 
 	params := make([]SendDataCfg, 0, len(users))
+	paramsCh := make(chan SendDataCfg, len(users))
+
 	destination := repository.Destination{
 		ProjectID: req.BqConfig.ProjectId,
 		DatasetID: req.BqConfig.DatasetId,
@@ -89,64 +94,93 @@ func (s *Service) PushPlacementStatByDayToBQ(ctx context.Context, req *pb.PushPl
 		Timeout: getClientTimeout,
 	}
 
+	wg := &sync.WaitGroup{}
+	wg.Add(len(users))
+
+	mux := &sync.Mutex{}
+
 	for _, user := range users {
-		userLogger := serviceLogger.With().Str("user", user.Name).Logger()
-		solConfig := config.Soloway{
-			UserName: user.Login,
-			Password: user.Password,
-		}
+		go func(user entity.User, ch chan<- SendDataCfg) {
+			defer wg.Done()
 
-		solClient := solowaysdk.NewClient(transport, solConfig.UserName, solConfig.Password)
+			userLogger := serviceLogger.With().Str("user", user.Name).Logger()
+			solConfig := config.Soloway{
+				UserName: user.Login,
+				Password: user.Password,
+			}
 
-		err = solClient.Login(ctx)
-		if err != nil {
-			msg := fmt.Sprintf("can't login: %v", err)
-			userLogger.Error().Err(err).Msg(msg)
-			warnings = append(warnings, fmt.Sprintf("clent `%s`: %v", user.Name, msg))
+			solClient := solowaysdk.NewClient(transport, solConfig.UserName, solConfig.Password)
 
-			continue
-		}
+			err = solClient.Login(ctx)
+			if err != nil {
+				msg := fmt.Sprintf("can't login: %v", err)
+				userLogger.Error().Err(err).Msg(msg)
+				mux.Lock()
+				warnings = append(warnings, fmt.Sprintf("clent `%s`: %v", user.Name, msg))
+				mux.Unlock()
 
-		err = solClient.Whoami(ctx)
-		if err != nil {
-			msg := fmt.Sprintf("can't whoami: %v", err)
-			userLogger.Error().Err(err).Msg(msg)
-			warnings = append(warnings, fmt.Sprintf("clent `%s`: %v", user.Name, msg))
+				return
+			}
 
-			continue
-		}
+			err = solClient.Whoami(ctx)
+			if err != nil {
+				msg := fmt.Sprintf("can't whoami: %v", err)
+				userLogger.Error().Err(err).Msg(msg)
+				mux.Lock()
+				warnings = append(warnings, fmt.Sprintf("clent `%s`: %v", user.Name, msg))
+				mux.Unlock()
 
-		userLogger.Info().Msg("collect stat")
+				return
+			}
 
-		stat, err := repo.GetStatPlacementByDay(ctx, solClient, dateStart, dateFinish)
-		if err != nil {
-			msg := fmt.Sprintf("can't get stat: %v", err)
-			userLogger.Error().Err(err).Msg(msg)
-			warnings = append(warnings, fmt.Sprintf("clent `%s`: %v", user.Name, msg))
+			userLogger.Info().Msg("collect stat")
 
-			continue
-		}
+			stat, err := repo.GetStatPlacementByDay(ctx, solClient, dateStart, dateFinish)
+			if err != nil {
+				msg := fmt.Sprintf("can't get stat: %v", err)
+				userLogger.Error().Err(err).Msg(msg)
+				mux.Lock()
+				warnings = append(warnings, fmt.Sprintf("clent `%s`: %v", user.Name, msg))
+				mux.Unlock()
 
-		filename, err := converters.GeneratePlacementStatByDayJSON(s.cfg.AttachmentsDir, stat, user.Login, dateUpdate)
-		if err != nil {
-			msg := fmt.Sprintf("can't generate json: %v", err)
-			userLogger.Error().Err(err).Msg(msg)
-			warnings = append(warnings, fmt.Sprintf("clent `%s`: %v", user.Name, msg))
+				return
+			}
 
-			continue
-		}
+			filename, err := converters.GeneratePlacementStatByDayJSON(s.cfg.AttachmentsDir, stat, user.Name, dateUpdate)
+			if err != nil {
+				msg := fmt.Sprintf("can't generate json: %v", err)
+				userLogger.Error().Err(err).Msg(msg)
+				mux.Lock()
+				warnings = append(warnings, fmt.Sprintf("clent `%s`: %v", user.Name, msg))
+				mux.Unlock()
 
-		bucketFiles = append(bucketFiles, filename)
-		cfg := SendDataCfg{
-			DateStart:   dateStart,
-			DateFinish:  dateFinish,
-			Destination: destination,
-			BucketName:  req.CsConfig.BucketName,
-			Filename:    filename,
-			ClientName:  user.Name,
-		}
+				return
+			}
 
-		params = append(params, cfg)
+			mux.Lock()
+			bucketFiles = append(bucketFiles, filename)
+			mux.Unlock()
+
+			cfg := SendDataCfg{
+				DateStart:   dateStart,
+				DateFinish:  dateFinish,
+				Destination: destination,
+				BucketName:  req.CsConfig.BucketName,
+				Filename:    filename,
+				ClientName:  user.Name,
+			}
+
+			ch <- cfg
+		}(user, paramsCh)
+	}
+
+	go func() {
+		wg.Wait()
+		close(paramsCh)
+	}()
+
+	for param := range paramsCh {
+		params = append(params, param)
 	}
 
 	defer clearBucketFiles(serviceLogger, bucketFiles)

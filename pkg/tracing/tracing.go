@@ -16,6 +16,7 @@ const (
 	AttributeProjectID = "project.id"
 	AttributeRequest   = "request"
 	AttributeResponse  = "response"
+	AttributeUser      = "user"
 )
 
 // Init returns an instance of Jaeger Tracer.
