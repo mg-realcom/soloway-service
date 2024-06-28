@@ -1,6 +1,7 @@
 package errors
 
 const (
+	ErrMsgFailedValidateRequest   = "failed to validate request"
 	ErrMsgFailedCastRequest       = "failed to cast request"
 	ErrMsgFailedInitBigQuery      = "can't init client BigQuery"
 	ErrMsgFailedInitCloudStorage  = "can't init client CloudStorage"
