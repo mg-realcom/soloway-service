@@ -2,6 +2,7 @@ package report
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-kit/kit/endpoint"
 	"google.golang.org/api/option"
@@ -27,9 +28,9 @@ func makePushPlacementStatByDayToBQ(s report.IService) endpoint.Endpoint {
 
 		req, err := validatePushPlacementStatByDayToBQ(request)
 		if err != nil {
-			serviceLogger.Error().Stack().Err(err).Msg(errmsg.ErrMsgFailedCastRequest)
+			serviceLogger.Err(err).Stack().Msg(errmsg.ErrMsgFailedValidateRequest)
 
-			return nil, status.Error(codes.InvalidArgument, errmsg.ErrMsgFailedCastRequest)
+			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("%s: %s", errmsg.ErrMsgFailedValidateRequest, err.Error()))
 		}
 
 		tracing.SetSpanAttribute(span, tracing.AttributeProjectID, req.BqConfig.ProjectId)
