@@ -4,6 +4,8 @@ import (
 	"net"
 	"time"
 
+	"soloway/pkg/interceptors"
+
 	kitgrpc "github.com/go-kit/kit/transport/grpc"
 	pb "github.com/mg-realcom/go-genproto/service/soloway.v1"
 	"github.com/rs/zerolog"
@@ -21,11 +23,11 @@ import (
 func initKitGRPC(appConfig *config.Configuration, endpoints endpoint.ServicesEndpoints, netLogger zerolog.Logger, listenErr chan error) (*googlegrpc.Server, net.Listener) {
 	var serverOptions []kitgrpc.ServerOption
 
-	grpcServer := googlegrpc.NewServer(googlegrpc.StatsHandler(otelgrpc.NewServerHandler()))
+	grpcServer := googlegrpc.NewServer(googlegrpc.StatsHandler(otelgrpc.NewServerHandler()), googlegrpc.UnaryInterceptor(interceptors.AuthInterceptor(appConfig.Token)))
 
-	mailServer := tpReport.NewServer(endpoints.ReportEP, serverOptions)
+	newServer := tpReport.NewServer(endpoints.ReportEP, serverOptions)
 
-	pb.RegisterSolowayServiceServer(grpcServer, mailServer)
+	pb.RegisterSolowayServiceServer(grpcServer, newServer)
 
 	l, err := net.Listen(appConfig.GRPC.Network, appConfig.GRPC.Address)
 	if err != nil {

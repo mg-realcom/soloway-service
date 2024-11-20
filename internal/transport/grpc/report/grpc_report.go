@@ -9,7 +9,7 @@ import (
 )
 
 type RPCServer struct {
-	pushPlacementStatByDayToBQ kitgrpc.Handler
+	sendReportToStorage kitgrpc.Handler
 
 	pb.UnimplementedSolowayServiceServer
 }
@@ -17,7 +17,7 @@ type RPCServer struct {
 // NewServer is a constructor for creating a new instance of a gRPC server(RPCServer structure).
 func NewServer(endpoints report.Endpoints, serverOptions []kitgrpc.ServerOption) pb.SolowayServiceServer {
 	return &RPCServer{
-		pushPlacementStatByDayToBQ: kitgrpc.NewServer(endpoints.PushPlacementStatByDayToBQ, DecodeRequest, EncodeResponse, serverOptions...),
+		sendReportToStorage: kitgrpc.NewServer(endpoints.SendReportToStorage, DecodeRequest, EncodeResponse, serverOptions...),
 
 		UnimplementedSolowayServiceServer: pb.UnimplementedSolowayServiceServer{},
 	}

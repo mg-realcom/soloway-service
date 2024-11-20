@@ -14,8 +14,9 @@ type Configuration struct {
 	Telemetry      Telemetry `yaml:"telemetry" env-prefix:"TELEMETRY_" env-required:"true"`
 	Log            Log       `yaml:"log" env-prefix:"LOG_" env-required:"true"`
 	AttachmentsDir string    `yaml:"attachments_dir" env:"ATTACHMENTS_DIR" env-required:"true"`
-	KeysDir        string    `yaml:"keys_dir" env:"KEYS_DIR" env-required:"true"`
+	Token          string    `yaml:"token" env:"TOKEN" env-required:"true"`
 	PrometheusAddr string    `yaml:"prometheus_addr" env:"PROMETHEUS_ADDR" env-required:"true"`
+	KeysDir        string    `yaml:"keys_dir" env:"KEYS_DIR" env-required:"true"`
 }
 
 type GRPC struct {
@@ -71,4 +72,26 @@ func (c *Configuration) Validation() error {
 	}
 
 	return nil
+}
+
+type Report struct {
+	ReportName       string `yaml:"report_name"`
+	SpreadsheetID    string `yaml:"spreadsheet_id"`
+	GoogleServiceKey string `yaml:"google_service_key"`
+	ProjectID        string `yaml:"project_id"`
+	DatasetID        string `yaml:"dataset_id"`
+	Table            string `yaml:"table_id"`
+	Days             int    `yaml:"period"`
+}
+
+type Soloway struct {
+	UserName string `yaml:"username" env:"SOLOWAY_USERNAME"`
+	Password string `yaml:"password" env:"SOLOWAY_PASSWORD"`
+}
+
+type BQ struct {
+	ServiceKeyPath string `yaml:"service_key_path"`
+	ProjectID      string `yaml:"project_id"`
+	DatasetID      string `yaml:"dataset_id"`
+	TableID        string `yaml:"table_id"`
 }

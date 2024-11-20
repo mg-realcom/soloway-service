@@ -7,6 +7,6 @@ import (
 	"soloway/pkg/expanded_errors"
 )
 
-func (s *RPCServer) PushPlacementStatByDayToBQ(ctx context.Context, req *pb.PushPlacementStatByDayToBQRequest) (*pb.PushPlacementStatByDayToBQResponse, error) {
-	return expanded_errors.EncodeResponseGRPC[*pb.PushPlacementStatByDayToBQResponse](s.pushPlacementStatByDayToBQ.ServeGRPC(ctx, req))
+func (s *RPCServer) SendReportToStorage(ctx context.Context, req *pb.SendReportToStorageRequest) (*pb.SendReportToStorageResponse, error) {
+	return expanded_errors.EncodeResponseGRPC[*pb.SendReportToStorageResponse](s.sendReportToStorage.ServeGRPC(ctx, req))
 }

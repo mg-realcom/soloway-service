@@ -10,7 +10,7 @@ import (
 )
 
 type IService interface {
-	PushPlacementStatByDayToBQ(ctx context.Context, req *pb.PushPlacementStatByDayToBQRequest, repo repository.IRepository) (*pb.PushPlacementStatByDayToBQResponse, error)
+	SendReportToStorage(ctx context.Context, req *pb.SendReportToStorageRequest, repo repository.IRepository) (*pb.SendReportToStorageResponse, error)
 
 	GetLogger() *zerolog.Logger
 	GetConfig() *config.Configuration

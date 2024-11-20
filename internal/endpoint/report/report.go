@@ -6,11 +6,11 @@ import (
 )
 
 type Endpoints struct {
-	PushPlacementStatByDayToBQ endpoint.Endpoint
+	SendReportToStorage endpoint.Endpoint
 }
 
 func MakeEndpoints(s report.IService) Endpoints {
 	return Endpoints{
-		PushPlacementStatByDayToBQ: makePushPlacementStatByDayToBQ(s),
+		SendReportToStorage: makeSendReportToStorage(s),
 	}
 }

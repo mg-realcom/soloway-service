@@ -17,7 +17,6 @@ import (
 	"google.golang.org/grpc/status"
 	"soloway/internal/config"
 	repository "soloway/internal/repository/report"
-	"soloway/pkg/converters"
 )
 
 const (
@@ -33,8 +32,10 @@ type SendDataCfg struct {
 	ClientName  string
 }
 
-func (s *Service) PushPlacementStatByDayToBQ(ctx context.Context, req *pb.PushPlacementStatByDayToBQRequest, repo repository.IRepository) (*pb.PushPlacementStatByDayToBQResponse, error) {
-	serviceLogger := s.logger.With().Str("Source", "PushPlacementStatByDayToBQ").Logger()
+func (s *Service) SendReportToStorage(ctx context.Context, req *pb.SendReportToStorageRequest, repo repository.IRepository) (*pb.SendReportToStorageResponse, error) {
+	serviceLogger := s.logger.With().Str("Source", "SendReportToStorage").Logger()
+
+	serviceLogger.Info().Msg("in progress")
 
 	var dateStart, dateFinish time.Time
 
@@ -77,18 +78,7 @@ func (s *Service) PushPlacementStatByDayToBQ(ctx context.Context, req *pb.PushPl
 
 	var warnings []string
 
-	var bucketFiles []string
-
-	dateUpdate := time.Now()
-
-	params := make([]SendDataCfg, 0, len(users))
-	paramsCh := make(chan SendDataCfg, len(users))
-
-	destination := repository.Destination{
-		ProjectID: req.BqConfig.ProjectId,
-		DatasetID: req.BqConfig.DatasetId,
-		TableID:   req.BqConfig.TableId,
-	}
+	var files []entity.File
 
 	transport := http.Client{
 		Timeout: getClientTimeout,
@@ -100,7 +90,7 @@ func (s *Service) PushPlacementStatByDayToBQ(ctx context.Context, req *pb.PushPl
 	mux := &sync.Mutex{}
 
 	for _, user := range users {
-		go func(user entity.User, ch chan<- SendDataCfg) {
+		go func(user entity.User) {
 			defer wg.Done()
 
 			userLogger := serviceLogger.With().Str("user", user.Name).Logger()
@@ -135,7 +125,7 @@ func (s *Service) PushPlacementStatByDayToBQ(ctx context.Context, req *pb.PushPl
 
 			userLogger.Info().Msg("collect stat")
 
-			stat, err := repo.GetStatPlacementByDay(ctx, solClient, dateStart, dateFinish)
+			gotFiles, err := repo.GetStatPlacementByDay(ctx, solClient, dateStart, dateFinish, s.cfg.AttachmentsDir)
 			if err != nil {
 				msg := fmt.Sprintf("can't get stat: %v", err)
 				userLogger.Error().Err(err).Msg(msg)
@@ -146,73 +136,64 @@ func (s *Service) PushPlacementStatByDayToBQ(ctx context.Context, req *pb.PushPl
 				return
 			}
 
-			filename, err := converters.GeneratePlacementStatByDayJSON(s.cfg.AttachmentsDir, stat, user.Name, dateUpdate)
-			if err != nil {
-				msg := fmt.Sprintf("can't generate json: %v", err)
-				userLogger.Error().Err(err).Msg(msg)
-				mux.Lock()
-				warnings = append(warnings, fmt.Sprintf("clent `%s`: %v", user.Name, msg))
-				mux.Unlock()
-
-				return
-			}
-
 			mux.Lock()
-			bucketFiles = append(bucketFiles, filename)
+			files = append(files, gotFiles...)
 			mux.Unlock()
-
-			cfg := SendDataCfg{
-				DateStart:   dateStart,
-				DateFinish:  dateFinish,
-				Destination: destination,
-				BucketName:  req.CsConfig.BucketName,
-				Filename:    filename,
-				ClientName:  user.Name,
-			}
-
-			ch <- cfg
-		}(user, paramsCh)
+		}(user)
 	}
 
-	go func() {
-		wg.Wait()
-		close(paramsCh)
-	}()
+	wg.Wait()
 
-	for param := range paramsCh {
-		params = append(params, param)
-	}
+	tempFiles := addTempFiles(files)
 
-	defer clearBucketFiles(serviceLogger, bucketFiles)
-	for i := 0; i < len(params); i++ {
-		select {
-		case <-ctx.Done():
-			serviceLogger.Warn().Msg("context canceled")
+	defer clearTempFiles(serviceLogger, tempFiles)
 
-			return nil, status.Error(codes.Canceled, "canceled")
-		default:
-			serviceLogger.Info().Str("user", params[i].ClientName).Msg("sending")
+	dates := make(map[time.Time]bool)
 
-			err = repo.SendFromStorage(ctx, params[i].Destination, params[i].DateStart, params[i].DateFinish, params[i].BucketName, params[i].Filename, params[i].ClientName)
-			if err != nil {
-				msg := fmt.Sprintf("can't send to bq: %v", err)
-				serviceLogger.Error().Err(err).Str("user", params[i].ClientName).Msg(msg)
-
-				warnings = append(warnings, fmt.Sprintf("clent `%s`: %v", params[i].ClientName, msg))
-
-				continue
-			}
+	for _, file := range files {
+		if dates[file.Date] {
+			continue
+		} else {
+			dates[file.Date] = true
 		}
 	}
 
-	return &pb.PushPlacementStatByDayToBQResponse{Warnings: warnings}, nil
+	for date := range dates {
+		err := repo.StorageClearByDate(ctx, req.Storage.GetYandexStorage().GetFolderName(), req.Storage.GetYandexStorage().GetBucketName(), date)
+		if err != nil {
+			msg := fmt.Sprintf("failed to clear old files: %v", err)
+			serviceLogger.Error().Msg(msg)
+
+			return nil, status.Error(codes.Internal, msg)
+		}
+	}
+
+	for _, file := range files {
+		err := repo.UploadToStorage(ctx, req.Storage.GetYandexStorage().GetFolderName(), req.Storage.GetYandexStorage().GetBucketName(), file.Path, file.Date)
+		if err != nil {
+			msg := fmt.Sprintf("failed to send report: %v", err)
+			serviceLogger.Error().Msg(msg)
+
+			return nil, status.Error(codes.Internal, msg)
+		}
+	}
+
+	return &pb.SendReportToStorageResponse{Warnings: warnings}, nil
 }
 
-func clearBucketFiles(logger zerolog.Logger, files []string) {
+func clearTempFiles(logger zerolog.Logger, files []string) {
 	for _, file := range files {
 		err := os.Remove(file)
 		if err != nil {
 			logger.Error().Err(err).Msg("can't remove file")
 		}
 	}
+}
+
+func addTempFiles(files []entity.File) []string {
+	bucketFiles := make([]string, 0, len(files))
+	for _, file := range files {
+		bucketFiles = append(bucketFiles, file.Path)
+	}
+	return bucketFiles
 }

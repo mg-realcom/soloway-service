@@ -4,13 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
 	"soloway/pkg/tracing"
 
-	"cloud.google.com/go/civil"
 	solowaysdk "github.com/zfullio/soloway-sdk"
 	"golang.org/x/sync/errgroup"
 	"soloway/internal/entity"
@@ -18,56 +16,53 @@ import (
 
 const readRange = "// Config!A2:C"
 
-func (r Repository) SendFromStorage(ctx context.Context, destination Destination, dateStart, dateFinish time.Time, bucketName string, file string, clientName string) (err error) {
-	repoLogger := r.logger.With().Str("Source", "SendFromStorage").Str("type", "bq").Logger()
+func (r Repository) UploadToStorage(ctx context.Context, directory string, bucketName string, filePath string, date time.Time) error {
+	method := "UploadToStorage"
+	storage := "YandexObjectStorage"
+	repoLogger := r.logger.With().Str("Source", method).Str("type", storage).Logger()
 
-	ctx, span := tracing.CreateSpan(ctx, "bq", "SendFromStorage")
+	ctx, span := tracing.CreateSpan(ctx, storage, method)
 
-	tracing.SetSpanAttribute(span, tracing.AttributeUser, clientName)
-	tracing.SetSpanAttribute(span, "file", file)
+	tracing.SetSpanAttribute(span, "bucket", bucketName)
+	tracing.SetSpanAttribute(span, "directory", directory)
+	tracing.SetSpanAttribute(span, "file", filePath)
+	tracing.SetSpanAttribute(span, "date", date.Format(time.DateOnly))
 
-	schema := PlacementStatDTO{}
-
-	err = r.storage.SendFile(ctx, file)
+	err := r.storage.UploadFileWithDateDestination(ctx, bucketName, directory, filePath, date)
 	if err != nil {
 		msg := "error send file"
 		repoLogger.Error().Err(err).Msg(msg)
 		tracing.EndSpanError(span, err, msg, true)
 
-		return fmt.Errorf("error send storage: %w", err)
+		return fmt.Errorf("error upload file to storage: %w", err)
 	}
 
-	err = r.bd.TableExists(ctx, destination)
+	tracing.EndSpanOk(span, method, true)
+
+	return nil
+}
+
+func (r Repository) StorageClearByDate(ctx context.Context, directory string, bucketName string, date time.Time) error {
+	method := "StorageClearByDate"
+	storage := "YandexObjectStorage"
+	repoLogger := r.logger.With().Str("Source", method).Str("type", storage).Logger()
+
+	ctx, span := tracing.CreateSpan(ctx, storage, method)
+
+	tracing.SetSpanAttribute(span, "bucket", bucketName)
+	tracing.SetSpanAttribute(span, "directory", directory)
+	tracing.SetSpanAttribute(span, "date", date.Format(time.DateOnly))
+
+	err := r.storage.DeleteFolderByDate(ctx, bucketName, directory, date)
 	if err != nil {
-		err = r.bd.CreateTable(ctx, destination, schema)
-		if err != nil {
-			msg := "error create BQ table"
-			repoLogger.Error().Err(err).Msg(msg)
-			tracing.EndSpanError(span, err, msg, true)
-
-			return fmt.Errorf("creation BQ table error: %w", err)
-		}
-	} else {
-		err = r.bd.DeleteByDateColumn(ctx, destination, clientName, "date", dateStart, dateFinish)
-		if err != nil {
-			msg := "error delete bq"
-			repoLogger.Error().Err(err).Msg(msg)
-			tracing.EndSpanError(span, err, msg, true)
-
-			return fmt.Errorf("error delete bq: %w", err)
-		}
-	}
-
-	err = r.bd.ImportFromCS(ctx, destination, bucketName, file, schema)
-	if err != nil {
-		msg := "error push to BQ from storage"
+		msg := "error delete folder"
 		repoLogger.Error().Err(err).Msg(msg)
 		tracing.EndSpanError(span, err, msg, true)
 
-		return fmt.Errorf("error push to BQ from storage: %w", err)
+		return fmt.Errorf("error delete folder: %w", err)
 	}
 
-	tracing.EndSpanOk(span, "SendFromStorage", true)
+	tracing.EndSpanOk(span, method, true)
 
 	return nil
 }
@@ -144,7 +139,7 @@ func (r Repository) GetUsers(ctx context.Context, spreadsheetID string) ([]entit
 	return users, nil
 }
 
-func (r Repository) GetStatPlacementByDay(ctx context.Context, client *solowaysdk.Client, startDate time.Time, stopDate time.Time) (stat []entity.StatPlacement, err error) {
+func (r Repository) GetStatPlacementByDay(ctx context.Context, client *solowaysdk.Client, startDate time.Time, stopDate time.Time, attachmentDir string) ([]entity.File, error) {
 	repoLogger := r.logger.With().Str("Source", "GetStatPlacementByDay").Str("type", "soloway-api").Str("username", client.Username).Logger()
 
 	ctx, span := tracing.CreateSpan(ctx, "soloway-api", "GetStatPlacementByDay")
@@ -157,7 +152,7 @@ func (r Repository) GetStatPlacementByDay(ctx context.Context, client *solowaysd
 		repoLogger.Error().Err(err).Msg(msg)
 		tracing.EndSpanError(span, err, msg, true)
 
-		return stat, errors.New(msg)
+		return nil, errors.New(msg)
 	}
 
 	placements := make([]entity.Placement, 0, len(data.List))
@@ -182,7 +177,7 @@ func (r Repository) GetStatPlacementByDay(ctx context.Context, client *solowaysd
 			var data []entity.StatPlacement
 
 			for _, item := range placementStat.List {
-				data = append(data, *placementStatFromDTO(item, placement.Name))
+				data = append(data, *placementStatFromDTO(item, placement.Name, client.Username))
 			}
 
 			statCh <- data
@@ -196,6 +191,8 @@ func (r Repository) GetStatPlacementByDay(ctx context.Context, client *solowaysd
 		close(statCh)
 	}()
 
+	stat := make([]entity.StatPlacement, 0)
+
 	for i := range statCh {
 		stat = append(stat, i...)
 	}
@@ -206,9 +203,18 @@ func (r Repository) GetStatPlacementByDay(ctx context.Context, client *solowaysd
 		return nil, err
 	}
 
+	filenames, err := GenerateReportPlacementStatJSON(attachmentDir, stat)
+	if err != nil {
+		msg := "can't generate report"
+		repoLogger.Error().Err(err).Msg(msg)
+		tracing.EndSpanError(span, err, msg, true)
+
+		return nil, fmt.Errorf("GenerateReport: %w", err)
+	}
+
 	tracing.EndSpanOk(span, "GetStatPlacementByDay", true)
 
-	return stat, nil
+	return filenames, nil
 }
 
 func newPlacement(placement solowaysdk.Placement) *entity.Placement {
@@ -218,29 +224,14 @@ func newPlacement(placement solowaysdk.Placement) *entity.Placement {
 	}
 }
 
-func placementStatFromDTO(pStat solowaysdk.PerformanceStat, placementName string) *entity.StatPlacement {
-	date, err := time.Parse(time.DateOnly, pStat.Date)
-	if err != nil {
-		log.Println(err)
-	}
-
+func placementStatFromDTO(pStat solowaysdk.PerformanceStat, placementName string, client string) *entity.StatPlacement {
 	return &entity.StatPlacement{
+		Client:        client,
 		Clicks:        pStat.Clicks,
 		Cost:          pStat.Cost,
 		PlacementID:   pStat.PlacementID,
 		PlacementName: placementName,
 		Exposures:     pStat.Exposures,
-		Date:          date,
+		Date:          pStat.Date,
 	}
-}
-
-type PlacementStatDTO struct {
-	Client        string     `bigquery:"client_name"`
-	Clicks        int        `bigquery:"clicks"`
-	Cost          int        `bigquery:"cost"`
-	PlacementID   string     `bigquery:"placement_id"`
-	PlacementName string     `bigquery:"placement_name"`
-	Exposures     int        `bigquery:"exposures"`
-	Date          civil.Date `bigquery:"date"`
-	DateUpdate    time.Time  `bigquery:"date_update"`
 }

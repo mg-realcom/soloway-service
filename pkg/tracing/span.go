@@ -14,12 +14,14 @@ import (
 
 func CreateSpan(ctx context.Context, tracerName, spanName string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
 	newCtx, span := otel.Tracer(tracerName).Start(ctx, spanName, opts...)
+
 	return newCtx, span
 }
 
 func EndSpanError(span trace.Span, err error, description string, withEnd bool) {
 	span.RecordError(err)
 	span.SetStatus(codes.Error, description)
+
 	if withEnd {
 		span.End()
 	}
@@ -27,6 +29,7 @@ func EndSpanError(span trace.Span, err error, description string, withEnd bool) 
 
 func EndSpanOk(span trace.Span, description string, withEnd bool) {
 	span.SetStatus(codes.Ok, description)
+
 	if withEnd {
 		span.End()
 	}

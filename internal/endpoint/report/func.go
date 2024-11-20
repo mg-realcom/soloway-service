@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/mg-realcom/s3utils"
+
 	"github.com/go-kit/kit/endpoint"
 	"google.golang.org/api/option"
 	"google.golang.org/api/sheets/v4"
@@ -13,67 +15,39 @@ import (
 	"soloway/internal/service/report"
 	errmsg "soloway/pkg/errors"
 	"soloway/pkg/helpers"
-	"soloway/pkg/repository/bq"
-	"soloway/pkg/repository/cs"
 	"soloway/pkg/tracing"
 )
 
-func makePushPlacementStatByDayToBQ(s report.IService) endpoint.Endpoint {
+func makeSendReportToStorage(s report.IService) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		reqID, ctx := helpers.GetRequestID(ctx)
-		serviceLogger := s.GetLogger().With().Str(helpers.RequestIDKey, reqID).Str("Source", "makePushReviseMvideoToBQ").Logger()
+		serviceLogger := s.GetLogger().With().Str(helpers.RequestIDKey, reqID).Str("Source", "makeSendReportToStorage").Logger()
 
 		span := tracing.SpanFromContext(ctx)
 		tracing.SetSpanAttribute(span, tracing.AttributeRequestID, reqID)
 
-		req, err := validatePushPlacementStatByDayToBQ(request)
+		req, err := validateSendReportToStorage(request)
 		if err != nil {
 			serviceLogger.Err(err).Stack().Msg(errmsg.ErrMsgFailedValidateRequest)
 
 			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("%s: %s", errmsg.ErrMsgFailedValidateRequest, err.Error()))
 		}
 
-		tracing.SetSpanAttribute(span, tracing.AttributeProjectID, req.BqConfig.ProjectId)
 		tracing.SetSpanAttributesByStructFields(span, req, tracing.AttributeRequest)
-		serviceLogger = serviceLogger.With().Str("project_id", req.BqConfig.ProjectId).Logger()
+		serviceLogger = serviceLogger.With().Str("project_id", req.Storage.GetYandexStorage().BucketName).Logger()
+
+		storage, err := s3utils.NewClient(ctx, "ru-central1")
+		if err != nil {
+			msg := errmsg.ErrMsgFailedInitS3
+			serviceLogger.Error().Stack().Err(err).Msg(msg)
+			return nil, err
+		}
 
 		cfg := s.GetConfig()
 
-		gServiceKey := cfg.KeysDir + "/" + req.BqConfig.ServiceKey
+		gServiceKey := cfg.KeysDir + "/" + req.GsConfig.ServiceKey
 
-		bd, err := bq.NewClient(ctx, s.GetLogger(), req.BqConfig.ProjectId, gServiceKey)
-		if err != nil {
-			msg := errmsg.ErrMsgFailedInitBigQuery
-			serviceLogger.Error().Stack().Err(err).Msg(msg)
-
-			return nil, status.Error(codes.InvalidArgument, msg)
-		}
-
-		defer func(bqClient *bq.Client) {
-			err := bqClient.Close()
-			if err != nil {
-				serviceLogger.Error().Stack().Err(err).Msg(errmsg.ErrMsgFailedCloseBigQuery)
-			}
-		}(bd)
-
-		storage, err := cs.NewClient(ctx, s.GetLogger(), req.CsConfig.BucketName, gServiceKey)
-		if err != nil {
-			msg := errmsg.ErrMsgFailedInitCloudStorage
-			serviceLogger.Error().Stack().Err(err).Msg(msg)
-
-			return nil, status.Error(codes.InvalidArgument, msg)
-		}
-
-		defer func(csClient *cs.Client) {
-			err := csClient.Close()
-			if err != nil {
-				serviceLogger.Error().Stack().Err(err).Msg(errmsg.ErrMsgFailedCloseCloudStorage)
-			}
-		}(storage)
-
-		gsServiceKey := cfg.KeysDir + "/" + req.GsConfig.ServiceKey
-
-		ghSrv, err := sheets.NewService(ctx, option.WithCredentialsFile(gsServiceKey))
+		ghSrv, err := sheets.NewService(ctx, option.WithCredentialsFile(gServiceKey))
 		if err != nil {
 			msg := errmsg.ErrMsgFailedInitGoogleSheets
 			serviceLogger.Error().Stack().Err(err).Msg(msg)
@@ -82,9 +56,9 @@ func makePushPlacementStatByDayToBQ(s report.IService) endpoint.Endpoint {
 		}
 
 		repoLogger := s.GetLogger().With().Str("repo", "report").Logger()
-		repo := repository.NewRepository(&repoLogger, bd, storage, ghSrv)
+		repo := repository.NewRepository(&repoLogger, storage, ghSrv)
 
-		resp, err := s.PushPlacementStatByDayToBQ(ctx, req, repo)
+		resp, err := s.SendReportToStorage(ctx, req, repo)
 		if err != nil {
 			return nil, err
 		}

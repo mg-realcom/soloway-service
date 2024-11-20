@@ -3,6 +3,7 @@ package report
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	pb "github.com/mg-realcom/go-genproto/service/soloway.v1"
 
@@ -18,19 +19,15 @@ func (err *ValidateError) Error() string {
 	return fmt.Sprintf("%s: %s", err.field, err.msg)
 }
 
-func validatePushPlacementStatByDayToBQ(request interface{}) (*pb.PushPlacementStatByDayToBQRequest, error) {
-	req, ok := request.(*pb.PushPlacementStatByDayToBQRequest)
+func validateSendReportToStorage(request interface{}) (*pb.SendReportToStorageRequest, error) {
+	req, ok := request.(*pb.SendReportToStorageRequest)
 	if !ok {
 		err := errors.New(errmsg.ErrMsgFailedCastRequest)
 
 		return nil, err
 	}
 
-	if err := validateBqConfig(req.GetBqConfig()); err != nil {
-		return nil, err
-	}
-
-	if err := validateCsConfig(req.GetCsConfig()); err != nil {
+	if err := validateStorageConfig(req.GetStorage()); err != nil {
 		return nil, err
 	}
 
@@ -43,40 +40,6 @@ func validatePushPlacementStatByDayToBQ(request interface{}) (*pb.PushPlacementS
 	}
 
 	return req, nil
-}
-
-// validateBqConfig проверяет поля BqConfig на nil и пустые значения.
-func validateBqConfig(config *pb.BqConfig) error {
-	if config == nil {
-		return &ValidateError{"is nil", "bq_config"}
-	}
-
-	if config.ProjectId == "" {
-		return &ValidateError{"is empty", "bq_config.project_id"}
-	}
-
-	if config.DatasetId == "" {
-		return &ValidateError{"is empty", "bq_config.dataset_id"}
-	}
-
-	if config.TableId == "" {
-		return &ValidateError{"is empty", "bq_config.table_id"}
-	}
-
-	return nil
-}
-
-// validateCsConfig проверяет поля CsConfig на nil и пустые значения.
-func validateCsConfig(config *pb.CsConfig) error {
-	if config == nil {
-		return &ValidateError{"is nil", "cs_config"}
-	}
-
-	if config.BucketName == "" {
-		return &ValidateError{"is empty", "cs_config.bucket_name"}
-	}
-
-	return nil
 }
 
 func validateGsConfig(config *pb.GsConfig) error {
@@ -107,6 +70,35 @@ func validatePeriod(period *pb.Period) error {
 
 	if period.GetDateTill() == "" {
 		return &ValidateError{"is empty", "period.date_till"}
+	}
+
+	return nil
+}
+
+// validateStorageConfig проверяет поля Storage на nil empty и некорректные значения.
+func validateStorageConfig(config *pb.Storage) error {
+	if config == nil {
+		return &ValidateError{msg: "is nil", field: "storage"}
+	}
+
+	if config.GetYandexStorage() == nil {
+		return &ValidateError{msg: "is nil", field: "storage.yandex_storage"}
+	}
+
+	if config.GetYandexStorage().GetBucketName() == "" {
+		return &ValidateError{msg: "is empty", field: "storage.yandex_storage.bucket_name"}
+	}
+
+	if config.GetYandexStorage().GetFolderName() == "" {
+		return &ValidateError{msg: "is empty", field: "storage.yandex_storage.folder_name"}
+	}
+
+	if strings.HasPrefix(config.GetYandexStorage().GetFolderName(), "/") {
+		return &ValidateError{msg: "is invalid, start with /", field: "storage.yandex_storage.folder_name"}
+	}
+
+	if strings.HasSuffix(config.GetYandexStorage().GetFolderName(), "/") {
+		return &ValidateError{msg: "is invalid, end with /", field: "storage.yandex_storage.folder_name"}
 	}
 
 	return nil

@@ -2,13 +2,20 @@ package entity
 
 import "time"
 
+type File struct {
+	Name string
+	Path string
+	Date time.Time
+}
+
 type StatPlacement struct {
+	Client        string
 	Clicks        int
 	Cost          int
 	PlacementID   string
 	PlacementName string
 	Exposures     int
-	Date          time.Time
+	Date          string
 }
 
 type User struct {
