@@ -139,7 +139,7 @@ func (r Repository) GetUsers(ctx context.Context, spreadsheetID string) ([]entit
 	return users, nil
 }
 
-func (r Repository) GetStatPlacementByDay(ctx context.Context, client *solowaysdk.Client, startDate time.Time, stopDate time.Time, attachmentDir string) ([]entity.File, error) {
+func (r Repository) GetStatPlacementByDay(ctx context.Context, client *solowaysdk.Client, clientName string, startDate time.Time, stopDate time.Time, attachmentDir string) ([]entity.File, error) {
 	repoLogger := r.logger.With().Str("Source", "GetStatPlacementByDay").Str("type", "soloway-api").Str("username", client.Username).Logger()
 
 	ctx, span := tracing.CreateSpan(ctx, "soloway-api", "GetStatPlacementByDay")
@@ -177,7 +177,7 @@ func (r Repository) GetStatPlacementByDay(ctx context.Context, client *solowaysd
 			var data []entity.StatPlacement
 
 			for _, item := range placementStat.List {
-				data = append(data, *placementStatFromDTO(item, placement.Name, client.Username))
+				data = append(data, *placementStatFromDTO(item, placement.Name, clientName))
 			}
 
 			statCh <- data

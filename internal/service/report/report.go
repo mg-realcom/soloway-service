@@ -125,7 +125,7 @@ func (s *Service) SendReportToStorage(ctx context.Context, req *pb.SendReportToS
 
 			userLogger.Info().Msg("collect stat")
 
-			gotFiles, err := repo.GetStatPlacementByDay(ctx, solClient, dateStart, dateFinish, s.cfg.AttachmentsDir)
+			gotFiles, err := repo.GetStatPlacementByDay(ctx, solClient, user.Name, dateStart, dateFinish, s.cfg.AttachmentsDir)
 			if err != nil {
 				msg := fmt.Sprintf("can't get stat: %v", err)
 				userLogger.Error().Err(err).Msg(msg)
