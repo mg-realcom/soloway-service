@@ -14,7 +14,7 @@ type IRepository interface {
 	UploadToStorage(ctx context.Context, directory string, bucketName string, filePath string, date time.Time) (err error)
 	StorageClearByDate(ctx context.Context, directory string, bucketName string, date time.Time) (err error)
 	GetUsers(ctx context.Context, spreadsheetID string) ([]entity.User, error)
-	GetStatPlacementByDay(ctx context.Context, client *solowaysdk.Client, startDate time.Time, stopDate time.Time, attachmentDir string) ([]entity.File, error)
+	GetStatPlacementByDay(ctx context.Context, client *solowaysdk.Client, clientName string, startDate time.Time, stopDate time.Time, attachmentDir string) ([]entity.File, error)
 }
 
 type IStorage interface {
